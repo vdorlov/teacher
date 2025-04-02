@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @keyframes gradientRotate {
+      0% { stop-color: #4F46E5; }
+      25% { stop-color: #2563EB; }
+      50% { stop-color: #7C3AED; }
+      75% { stop-color: #6366F1; }
+      100% { stop-color: #4F46E5; }
+    }
+    @keyframes symbolFade {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    .gradient-bg stop {
+      animation: gradientRotate 8s infinite;
+    }
+    .symbol {
+      animation: symbolFade 3s infinite;
+    }
+    .symbol:nth-child(2) { animation-delay: 0.5s; }
+    .symbol:nth-child(3) { animation-delay: 1s; }
+    .symbol:nth-child(4) { animation-delay: 1.5s; }
+  </style>
+
+  <!-- Градиентный фон -->
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%" gradientUnits="userSpaceOnUse" class="gradient-bg">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Фон с закругленными углами -->
+  <rect width="32" height="32" rx="8" fill="url(#grad)"/>
+  
+  <!-- Математические символы -->
+  <g class="symbol" fill="white" font-family="Arial" font-weight="bold">
+    <text x="8" y="14" font-size="8">∑</text>
+  </g>
+  <g class="symbol" fill="white" font-family="Arial" font-weight="bold">
+    <text x="18" y="14" font-size="8">∫</text>
+  </g>
+  <g class="symbol" fill="white" font-family="Arial" font-weight="bold">
+    <text x="8" y="24" font-size="8">π</text>
+  </g>
+  <g class="symbol" fill="white" font-family="Arial" font-weight="bold">
+    <text x="18" y="24" font-size="8">√</text>
+  </g>
+
+  <!-- Декоративные линии -->
+  <path d="M6 16h20" stroke="white" stroke-width="0.5" stroke-opacity="0.3"/>
+  <path d="M16 6v20" stroke="white" stroke-width="0.5" stroke-opacity="0.3"/>
+</svg> 
