@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Trash2, AlertTriangle } from 'lucide-react';
-import { TimeSlot, Appointment } from '../types';
+import { TimeSlot, Appointment, Student } from '../types';
 import { calculateEndTime } from '../utils/dateUtils';
 
 interface AppointmentModalProps {
@@ -11,6 +11,7 @@ interface AppointmentModalProps {
   slot: TimeSlot | null;
   appointment: Appointment | null;
   errorMessage: string | null;
+  students: Student[];
 }
 
 const AppointmentModal: React.FC<AppointmentModalProps> = ({
@@ -20,7 +21,8 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   onDelete,
   slot,
   appointment,
-  errorMessage
+  errorMessage,
+  students
 }) => {
   const [formData, setFormData] = useState<Omit<Appointment, 'id'> & { id?: string }>({
     date: new Date(),
@@ -29,6 +31,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     student: '',
     subject: '',
     duration: '1 час',
+    price: 0,
     comment: '',
     homework: '',
     studied: '',
@@ -37,12 +40,27 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     isPaid: false
   });
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isStudentListOpen, setIsStudentListOpen] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+
+  // Фильтруем список учеников на основе поискового запроса
+  const filteredStudents = students.filter(student =>
+    student.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Обработчик выбора ученика
+  const handleStudentSelect = (studentName: string) => {
+    setFormData(prev => ({ ...prev, student: studentName }));
+    setSearchTerm(studentName);
+    setIsStudentListOpen(false);
+  };
 
   // Initialize form data when modal opens
   useEffect(() => {
     if (appointment) {
       setFormData(appointment);
+      setSearchTerm(appointment.student);
     } else if (slot) {
       const endTime = calculateEndTime(slot.time, '1 час');
       setFormData({
@@ -52,6 +70,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         student: '',
         subject: '',
         duration: '1 час',
+        price: 0,
         comment: '',
         homework: '',
         studied: '',
@@ -59,28 +78,33 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
         isCompleted: false,
         isPaid: false
       });
+      setSearchTerm('');
     }
   }, [appointment, slot]);
 
   // Handle form input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    
+
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
-      
-      // If trying to uncheck "completed", show confirmation
+
       if (name === 'isCompleted' && !checked && formData.isCompleted) {
         setShowConfirmation(true);
         return;
       }
 
-      // If unchecking "completed", also uncheck "paid"
       if (name === 'isCompleted' && !checked) {
         setFormData(prev => ({ ...prev, isCompleted: false, isPaid: false }));
       } else {
         setFormData(prev => ({ ...prev, [name]: checked }));
       }
+    } else if (name === 'price') {
+      const numericValue = value === '' ? 0 : parseFloat(value);
+      // Форматируем значение с разделителями тысяч
+      const formattedValue = numericValue.toLocaleString('ru-RU');
+      e.target.value = formattedValue;
+      setFormData(prev => ({ ...prev, [name]: numericValue }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -90,7 +114,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   const handleDurationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newDuration = e.target.value;
     const newEndTime = calculateEndTime(formData.startTime, newDuration);
-    
+
     setFormData(prev => ({
       ...prev,
       duration: newDuration,
@@ -101,7 +125,8 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
   // Handle form submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    console.log('Form data before submit:', formData);
+
     const appointmentData: Appointment = {
       id: formData.id || crypto.randomUUID(),
       date: formData.date,
@@ -110,6 +135,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       student: formData.student,
       subject: formData.subject,
       duration: formData.duration,
+      price: formData.price,
       comment: formData.comment,
       homework: formData.homework,
       studied: formData.studied,
@@ -117,7 +143,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
       isCompleted: formData.isCompleted,
       isPaid: formData.isPaid
     };
-    
+    console.log('Appointment data to save:', appointmentData);
     onSave(appointmentData);
   };
 
@@ -128,6 +154,35 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
     }
   };
 
+  // Обработчик нажатия клавиш
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setIsStudentListOpen(false);
+    } else if (e.key === 'Enter' && filteredStudents.length > 0) {
+      e.preventDefault();
+      handleStudentSelect(filteredStudents[0].name);
+    } else if (e.key === 'ArrowDown' && isStudentListOpen && filteredStudents.length > 0) {
+      e.preventDefault();
+      const firstStudent = document.querySelector('.student-option') as HTMLElement;
+      if (firstStudent) firstStudent.focus();
+    }
+  };
+
+  // Обработчик клика вне списка
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.student-search-container')) {
+        setIsStudentListOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   if (!isOpen) return null;
 
   return (
@@ -137,14 +192,14 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
           <h2 className="text-xl font-bold">
             {appointment ? 'Редактировать запись' : 'Новая запись'}
           </h2>
-          <button 
+          <button
             onClick={onClose}
             className="p-1 rounded-full hover:bg-gray-100"
           >
             <X className="h-6 w-6" />
           </button>
         </div>
-        
+
         {errorMessage && (
           <div className="bg-red-50 border-l-4 border-red-500 p-4 m-4">
             <div className="flex items-start">
@@ -153,27 +208,54 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
             </div>
           </div>
         )}
-        
+
         <form onSubmit={handleSubmit} className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
+            <div className="relative student-search-container">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Ученик
               </label>
-              <select
-                name="student"
-                value={formData.student}
-                onChange={handleChange}
-                required
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setIsStudentListOpen(true);
+                  // Обновляем значение в formData только если есть точное совпадение
+                  const exactMatch = students.find(s => s.name.toLowerCase() === e.target.value.toLowerCase());
+                  if (exactMatch) {
+                    setFormData(prev => ({ ...prev, student: exactMatch.name }));
+                  } else {
+                    setFormData(prev => ({ ...prev, student: '' }));
+                  }
+                }}
+                onFocus={() => setIsStudentListOpen(true)}
+                onKeyDown={handleKeyDown}
+                placeholder="Начните вводить имя ученика..."
                 className="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="">Выберите ученика</option>
-                <option value="Ученик-1">Ученик-1</option>
-                <option value="Ученик-2">Ученик-2</option>
-                <option value="Ученик-3">Ученик-3</option>
-              </select>
+                required
+              />
+              {isStudentListOpen && filteredStudents.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                  {filteredStudents.map((student) => (
+                    <div
+                      key={student.id}
+                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer student-option focus:bg-gray-100 focus:outline-none"
+                      onClick={() => handleStudentSelect(student.name)}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleStudentSelect(student.name);
+                        }
+                      }}
+                    >
+                      {student.name}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Предмет
@@ -186,13 +268,16 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 className="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">Выберите предмет</option>
-                <option value="Математика база">Математика база</option>
-                <option value="Математика профиль">Математика профиль</option>
+                <option value="Математика ОГЭ">Математика ОГЭ</option>
+                <option value="Математика ЕГЭ (профиль)">Математика ЕГЭ (профиль)</option>
+                <option value="Математика ЕГЭ (база)">Математика ЕГЭ (база)</option>
+                <option value="Математика 8 класс">Математика 8 класс</option>
                 <option value="Физика ОГЭ">Физика ОГЭ</option>
                 <option value="Физика ЕГЭ">Физика ЕГЭ</option>
+                <option value="Русский язык ЕГЭ">Русский язык ЕГЭ</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Время начала
@@ -205,7 +290,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 className="w-full p-2 border rounded-md bg-gray-100"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Длительность
@@ -221,8 +306,27 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
                 <option value="2 часа">2 часа</option>
               </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Стоимость занятия
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="price"
+                  value={formData.price === 0 ? '' : formData.price.toLocaleString('ru-RU')}
+                  onChange={handleChange}
+                  className="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500 pr-12"
+                  placeholder="0"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-500">
+                  ₽
+                </div>
+              </div>
+            </div>
           </div>
-          
+
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Комментарий
@@ -235,7 +339,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
               className="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             ></textarea>
           </div>
-          
+
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Домашнее задание
@@ -251,7 +355,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Изучено на занятии
+              Пройдено
             </label>
             <textarea
               name="studied"
@@ -261,76 +365,72 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({
               className="w-full p-2 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             ></textarea>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="flex items-center">
               <input
                 type="checkbox"
-                id="isConfirmed"
                 name="isConfirmed"
                 checked={formData.isConfirmed}
                 onChange={handleChange}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <label htmlFor="isConfirmed" className="ml-2 block text-sm text-gray-700">
-                Занятие подтверждено
+              <label className="ml-2 text-sm text-gray-700">
+                Подтверждено
               </label>
             </div>
-            
+
             <div className="flex items-center">
               <input
                 type="checkbox"
-                id="isCompleted"
                 name="isCompleted"
                 checked={formData.isCompleted}
                 onChange={handleChange}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
               />
-              <label htmlFor="isCompleted" className="ml-2 block text-sm text-gray-700">
-                Занятие проведено
+              <label className="ml-2 text-sm text-gray-700">
+                Проведено
               </label>
             </div>
-            
+
             <div className="flex items-center">
               <input
                 type="checkbox"
-                id="isPaid"
                 name="isPaid"
                 checked={formData.isPaid}
                 onChange={handleChange}
                 disabled={!formData.isCompleted}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:opacity-50"
+                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded disabled:opacity-50"
               />
-              <label htmlFor="isPaid" className="ml-2 block text-sm text-gray-700">
-                Занятие оплачено
+              <label className="ml-2 text-sm text-gray-700">
+                Оплачено
               </label>
             </div>
           </div>
-          
-          <div className="flex justify-between">
+
+          <div className="flex justify-between items-center border-t pt-4 mt-4">
             {appointment && (
               <button
                 type="button"
                 onClick={handleDelete}
-                className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition"
+                className="inline-flex items-center px-3 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
               >
                 <Trash2 className="h-4 w-4 mr-1" />
-                Удалить запись
+                Удалить
               </button>
             )}
-            
-            <div className="ml-auto">
+            <div className="flex items-center gap-2 ml-auto">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-md mr-2 hover:bg-gray-100"
+                className="inline-flex items-center px-3 py-1.5 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
               >
+                <X className="h-4 w-4 mr-1" />
                 Отмена
               </button>
-              
               <button
                 type="submit"
-                className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition"
+                className="inline-flex items-center px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors"
               >
                 <Save className="h-4 w-4 mr-1" />
                 Сохранить

@@ -38,14 +38,14 @@ const ScheduleGrid: React.FC<ScheduleGridProps> = ({ daysData, onSlotSelect, onD
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
+      <table className="w-full border-collapse table-fixed">
         <thead>
           <tr>
-            <th className="border p-2 bg-gray-50 w-20"></th>
+            <th className="border p-2 bg-gray-50 w-20 min-w-[80px]"></th>
             {daysData.map((day, index) => (
               <th
                 key={index}
-                className={`border p-2 ${isToday(day.date) ? 'bg-indigo-50' : day.isWeekend ? 'bg-gray-100' : 'bg-gray-50'} ${day.isDayOff ? 'bg-gray-200' : ''}`}
+                className={`border p-2 w-[180px] min-w-[180px] ${isToday(day.date) ? 'bg-indigo-50' : day.isWeekend ? 'bg-gray-100' : 'bg-gray-50'} ${day.isDayOff ? 'bg-gray-200' : ''}`}
               >
                 <div className="flex flex-col items-center">
                   <div className={`font-bold ${day.isWeekend ? 'text-indigo-800' : ''}`}>
@@ -108,6 +108,7 @@ const ScheduleGrid: React.FC<ScheduleGridProps> = ({ daysData, onSlotSelect, onD
                         </div>
                         <div className="font-medium">{appointment.student}</div>
                         <div className="text-sm">{appointment.subject}</div>
+                        <div className="text-sm mt-1">{appointment.price.toLocaleString('ru-RU')} ₽</div>
                         <div className="text-xs mt-auto">{getStatusText(status)}</div>
                       </div>
                     </td>
