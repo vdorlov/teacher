@@ -13,6 +13,7 @@ export interface Appointment {
   student: string;
   subject: string;
   duration: string;
+  price: number;
   comment: string;
   homework: string;
   studied: string;
@@ -57,4 +58,9 @@ export interface Filters {
     completed: boolean;
     paid: boolean;
   };
+}
+
+export interface Student {
+  id: string;
+  name: string;
 }

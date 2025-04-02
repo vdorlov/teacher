@@ -4,13 +4,14 @@ import ScheduleGrid from './components/ScheduleGrid';
 import AppointmentModal from './components/AppointmentModal';
 import ExportModal from './components/ExportModal';
 import { Auth } from './components/Auth';
-import { Appointment, TimeSlot, DayData, AppointmentStatus, Filters, ExportDateRange } from './types';
+import { Appointment, TimeSlot, DayData, AppointmentStatus, Filters, ExportDateRange, Student } from './types';
 import { getWeekDates, formatDate, getTimeSlots, getCurrentWeekNumber, isTimeOverlapping } from './utils/dateUtils';
 import { exportToExcel } from './utils/exportUtils';
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
+import { AnimatedTitle } from './components/AnimatedTitle';
 
-function App() {
+export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -41,6 +42,7 @@ function App() {
     }
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
 
   useEffect(() => {
     // Check current auth status
@@ -104,6 +106,7 @@ function App() {
         student: app.student,
         subject: app.subject,
         duration: app.duration,
+        price: app.price === null ? 0 : Number(app.price), // Более строгая проверка на null и приведение к числу
         comment: app.comment,
         homework: app.homework,
         studied: app.studied,
@@ -181,23 +184,26 @@ function App() {
 
   // Handle appointment save
   const handleSaveAppointment = async (appointmentData: Appointment) => {
+    if (!user) {
+      setErrorMessage('Пожалуйста, войдите в систему для сохранения записи.');
+      return;
+    }
+
     if (checkAppointmentOverlap(appointmentData)) {
       setErrorMessage('Невозможно сохранить запись. Обнаружено пересечение с существующей записью.');
       return;
     }
 
     try {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) throw new Error('User not authenticated');
-
       const appointmentForDb = {
-        user_id: data.user.id,
-        date: formatDate(appointmentData.date),
+        user_id: user.id,
+        date: appointmentData.date.toISOString(),
         start_time: appointmentData.startTime,
         end_time: appointmentData.endTime,
         student: appointmentData.student,
         subject: appointmentData.subject,
         duration: appointmentData.duration,
+        price: Number(appointmentData.price), // Явное приведение к числу
         comment: appointmentData.comment,
         homework: appointmentData.homework,
         studied: appointmentData.studied,
@@ -409,229 +415,252 @@ function App() {
 
   const weekNumber = getCurrentWeekNumber(currentDate);
 
+  // Загрузка списка учеников
+  useEffect(() => {
+    const loadStudents = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('name');
+
+        if (error) throw error;
+
+        setStudents(data || []);
+      } catch (error) {
+        console.error('Error loading students:', error);
+      }
+    };
+
+    if (user) {
+      loadStudents();
+    }
+  }, [user]);
+
   if (!user) {
     return <Auth />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-indigo-600 text-white p-4 shadow-md">
-        <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Расписание учителя</h1>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5" />
-              <span>Неделя {weekNumber}</span>
-            </div>
-            <button
-              onClick={() => setIsExportModalOpen(true)}
-              className="flex items-center px-3 py-1 bg-white text-indigo-600 rounded-md hover:bg-indigo-50 transition"
-            >
-              <Download className="h-4 w-4 mr-1" />
-              Выгрузить
-            </button>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="flex items-center px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition"
-            >
-              Выйти
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto p-4">
-        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={goToPreviousWeek}
-                className="p-2 rounded-full hover:bg-gray-100"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-
-              <button
-                onClick={goToNextWeek}
-                className="p-2 rounded-full hover:bg-gray-100"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-
-              <button
-                onClick={goToToday}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition"
-              >
-                Сегодня
-              </button>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Calendar className="h-5 w-5 text-gray-500" />
-              <input
-                type="date"
-                value={currentDate.toISOString().split('T')[0]}
-                onChange={handleDateChange}
-                className="border rounded-md p-2"
-              />
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <div className="flex flex-wrap items-center gap-4 mb-2">
-              <div className="flex items-center">
-                <Filter className="h-5 w-5 text-gray-500 mr-2" />
-                <span className="text-sm font-medium">Фильтры:</span>
+    <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-indigo-600 text-white py-2 shadow-md">
+          <div className="container mx-auto flex justify-between items-center px-4">
+            <AnimatedTitle />
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                <span className="text-sm">Неделя {weekNumber}</span>
               </div>
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                className="flex items-center px-2 py-1 bg-white/10 text-white text-sm rounded-md hover:bg-white/20 transition"
+              >
+                <Download className="h-3 w-3 mr-1" />
+                Выгрузить
+              </button>
+              <button
+                onClick={() => supabase.auth.signOut()}
+                className="flex items-center px-2 py-1 bg-red-500/80 text-white text-sm rounded-md hover:bg-red-600/90 transition"
+              >
+                Выйти
+              </button>
+            </div>
+          </div>
+        </header>
 
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <select
-                  value={filters.student}
-                  onChange={(e) => handleFilterChange('student', e.target.value)}
-                  className="p-2 border rounded-md"
+        <main className="container mx-auto p-4">
+          <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={goToPreviousWeek}
+                  className="p-2 rounded-full hover:bg-gray-100"
                 >
-                  <option value="">Все ученики</option>
-                  {uniqueStudents.map(student => (
-                    <option key={student} value={student}>{student}</option>
-                  ))}
-                </select>
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
 
-                <select
-                  value={filters.subject}
-                  onChange={(e) => handleFilterChange('subject', e.target.value)}
-                  className="p-2 border rounded-md"
+                <button
+                  onClick={goToNextWeek}
+                  className="p-2 rounded-full hover:bg-gray-100"
                 >
-                  <option value="">Все предметы</option>
-                  {uniqueSubjects.map(subject => (
-                    <option key={subject} value={subject}>{subject}</option>
-                  ))}
-                </select>
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+
+                <button
+                  onClick={goToToday}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition"
+                >
+                  Сегодня
+                </button>
               </div>
 
-              <button
-                onClick={handleResetFilters}
-                className="flex items-center px-3 py-1 text-gray-600 hover:text-gray-900"
-              >
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Сбросить
-              </button>
+              <div className="flex items-center space-x-2">
+                <Calendar className="h-5 w-5 text-gray-500" />
+                <input
+                  type="date"
+                  value={currentDate.toISOString().split('T')[0]}
+                  onChange={handleDateChange}
+                  className="border rounded-md p-2"
+                />
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="filter-not-confirmed"
-                  checked={filters.statuses.notConfirmed}
-                  onChange={() => handleStatusFilterChange('notConfirmed')}
-                  className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded mr-1"
-                />
-                <label htmlFor="filter-not-confirmed" className="text-sm text-yellow-800 bg-yellow-100 px-2 py-1 rounded-md">
-                  Не подтверждено
-                </label>
+            <div className="mb-4">
+              <div className="flex flex-wrap items-center gap-4 mb-2">
+                <div className="flex items-center">
+                  <Filter className="h-5 w-5 text-gray-500 mr-2" />
+                  <span className="text-sm font-medium">Фильтры:</span>
+                </div>
+
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <select
+                    value={filters.student}
+                    onChange={(e) => handleFilterChange('student', e.target.value)}
+                    className="p-2 border rounded-md"
+                  >
+                    <option value="">Все ученики</option>
+                    {uniqueStudents.map(student => (
+                      <option key={student} value={student}>{student}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filters.subject}
+                    onChange={(e) => handleFilterChange('subject', e.target.value)}
+                    className="p-2 border rounded-md"
+                  >
+                    <option value="">Все предметы</option>
+                    {uniqueSubjects.map(subject => (
+                      <option key={subject} value={subject}>{subject}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleResetFilters}
+                  className="flex items-center px-3 py-1 text-gray-600 hover:text-gray-900"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Сбросить
+                </button>
               </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="filter-confirmed"
-                  checked={filters.statuses.confirmed}
-                  onChange={() => handleStatusFilterChange('confirmed')}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-1"
-                />
-                <label htmlFor="filter-confirmed" className="text-sm text-blue-800 bg-blue-100 px-2 py-1 rounded-md">
-                  Подтверждено
-                </label>
-              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="filter-not-confirmed"
+                    checked={filters.statuses.notConfirmed}
+                    onChange={() => handleStatusFilterChange('notConfirmed')}
+                    className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded mr-1"
+                  />
+                  <label htmlFor="filter-not-confirmed" className="text-sm text-yellow-800 bg-yellow-100 px-2 py-1 rounded-md">
+                    Не подтверждено
+                  </label>
+                </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="filter-completed"
-                  checked={filters.statuses.completed}
-                  onChange={() => handleStatusFilterChange('completed')}
-                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded mr-1"
-                />
-                <label htmlFor="filter-completed" className="text-sm text-green-800 bg-green-100 px-2 py-1 rounded-md">
-                  Проведено
-                </label>
-              </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="filter-confirmed"
+                    checked={filters.statuses.confirmed}
+                    onChange={() => handleStatusFilterChange('confirmed')}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-1"
+                  />
+                  <label htmlFor="filter-confirmed" className="text-sm text-blue-800 bg-blue-100 px-2 py-1 rounded-md">
+                    Подтверждено
+                  </label>
+                </div>
 
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="filter-paid"
-                  checked={filters.statuses.paid}
-                  onChange={() => handleStatusFilterChange('paid')}
-                  className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded mr-1"
-                />
-                <label htmlFor="filter-paid" className="text-sm text-purple-800 bg-purple-100 px-2 py-1 rounded-md">
-                  Оплачено
-                </label>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="filter-completed"
+                    checked={filters.statuses.completed}
+                    onChange={() => handleStatusFilterChange('completed')}
+                    className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded mr-1"
+                  />
+                  <label htmlFor="filter-completed" className="text-sm text-green-800 bg-green-100 px-2 py-1 rounded-md">
+                    Проведено
+                  </label>
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="filter-paid"
+                    checked={filters.statuses.paid}
+                    onChange={() => handleStatusFilterChange('paid')}
+                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded mr-1"
+                  />
+                  <label htmlFor="filter-paid" className="text-sm text-purple-800 bg-purple-100 px-2 py-1 rounded-md">
+                    Оплачено
+                  </label>
+                </div>
               </div>
             </div>
+
+            <ScheduleGrid
+              daysData={daysData}
+              onSlotSelect={handleSlotSelect}
+              onDayOffToggle={handleDayOffToggle}
+            />
           </div>
+        </main>
 
-          <ScheduleGrid
-            daysData={daysData}
-            onSlotSelect={handleSlotSelect}
-            onDayOffToggle={handleDayOffToggle}
+        {isModalOpen && (
+          <AppointmentModal
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              setSelectedSlot(null);
+              setEditingAppointment(null);
+              setErrorMessage(null);
+            }}
+            onSave={handleSaveAppointment}
+            onDelete={handleDeleteAppointment}
+            slot={selectedSlot}
+            appointment={editingAppointment}
+            errorMessage={errorMessage}
+            students={students}
           />
-        </div>
-      </main>
+        )}
 
-      {isModalOpen && (
-        <AppointmentModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedSlot(null);
-            setEditingAppointment(null);
-            setErrorMessage(null);
-          }}
-          onSave={handleSaveAppointment}
-          onDelete={handleDeleteAppointment}
-          slot={selectedSlot}
-          appointment={editingAppointment}
-          errorMessage={errorMessage}
-        />
-      )}
+        {isExportModalOpen && (
+          <ExportModal
+            isOpen={isExportModalOpen}
+            onClose={() => setIsExportModalOpen(false)}
+            onExport={handleExport}
+          />
+        )}
 
-      {isExportModalOpen && (
-        <ExportModal
-          isOpen={isExportModalOpen}
-          onClose={() => setIsExportModalOpen(false)}
-          onExport={handleExport}
-        />
-      )}
-
-      {confirmationModal.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-            <div className="flex items-start mb-4">
-              <AlertCircle className="h-6 w-6 text-yellow-500 mr-2" />
-              <h3 className="text-lg font-medium">Подтверждение</h3>
-            </div>
-            <p className="mb-6">{confirmationModal.message}</p>
-            <div className="flex justify-end space-x-2">
-              <button
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100"
-                onClick={() => setConfirmationModal({ ...confirmationModal, isOpen: false })}
-              >
-                Отмена
-              </button>
-              <button
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                onClick={confirmationModal.onConfirm}
-              >
-                Подтвердить
-              </button>
+        {confirmationModal.isOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+              <div className="flex items-start mb-4">
+                <AlertCircle className="h-6 w-6 text-yellow-500 mr-2" />
+                <h3 className="text-lg font-medium">Подтверждение</h3>
+              </div>
+              <p className="mb-6">{confirmationModal.message}</p>
+              <div className="flex justify-end space-x-2">
+                <button
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100"
+                  onClick={() => setConfirmationModal({ ...confirmationModal, isOpen: false })}
+                >
+                  Отмена
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                  onClick={confirmationModal.onConfirm}
+                >
+                  Подтвердить
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
-
-export default App;
