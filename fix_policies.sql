@@ -1,0 +1,1 @@
+CREATE POLICY enable_select_for_authenticated_users ON public.students FOR SELECT TO authenticated USING (true); CREATE POLICY enable_insert_for_authenticated_users ON public.students FOR INSERT TO authenticated WITH CHECK (true);
